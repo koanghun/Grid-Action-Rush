@@ -43,21 +43,21 @@ public class GridMovementController : MonoBehaviour
     private void OnEnable()
     {
         inputActions.Enable();
+        
+        // 移動入力イベントを購読
+        inputActions.Player.Move.performed += OnMovePerformed;
     }
 
     private void OnDisable()
     {
+        // イベント購読解除
+        inputActions.Player.Move.performed -= OnMovePerformed;
         inputActions.Disable();
     }
 
     private void Start()
     {
         InitializeGridPosition();
-    }
-
-    private void Update()
-    {
-        HandleMovementInput();
     }
 
     private void OnDestroy()
@@ -96,13 +96,19 @@ public class GridMovementController : MonoBehaviour
     #region 入力処理
 
     /// <summary>
-    /// 移動入力の処理（方向キーのみ対応）
-    /// WASD はスキル/攻撃用に予約済み
+    /// 移動入力イベントハンドラー（方向キーのみ対応）
+    /// QWERAF はスキル/攻撃用に予約済み
     /// </summary>
-    private void HandleMovementInput()
+    private void OnMovePerformed(InputAction.CallbackContext context)
     {
+        // クールタイム中は入力を無視
+        if (isMoving)
+        {
+            return;
+        }
+
         // Move アクションから入力を取得
-        Vector2 input = inputActions.Player.Move.ReadValue<Vector2>();
+        Vector2 input = context.ReadValue<Vector2>();
 
         // 方向キーのみを受け付ける（デジタル入力として扱う）
         // アナログスティックの場合は閾値を設定
@@ -123,13 +129,7 @@ public class GridMovementController : MonoBehaviour
             return;
         }
 
-        // 移動中（クールタイム中）は入力を無視
-        if (isMoving)
-        {
-            return;
-        }
-
-        // 即座に移動開始
+        // 移動開始
         TryMove(direction);
     }
 
