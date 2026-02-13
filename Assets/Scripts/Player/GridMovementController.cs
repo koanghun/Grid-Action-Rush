@@ -15,6 +15,11 @@ public class GridMovementController : MonoBehaviour
     [SerializeField] private Grid grid;
     [Tooltip("1秒あたりに移動するタイル数")]
     [SerializeField] private float moveSpeed = 5f;
+    
+    [Header("回避スキル設定")]
+    [SerializeField] private MovementSkillData dodgeSkill;
+    [Tooltip("障害物判定用のレイヤーマスク")]
+    [SerializeField] private LayerMask obstacleLayerMask;
 
     #endregion
 
@@ -25,6 +30,7 @@ public class GridMovementController : MonoBehaviour
 
     // 移動状態
     private Vector2Int currentGridPosition;
+    private Vector2Int facingDirection = Vector2Int.down;  // 現在の向き（初期: 下向き）
     private bool isMoving = false;  // true = クールタイム中（入力受付不可）
 
     // キャンセルトークン
@@ -46,12 +52,16 @@ public class GridMovementController : MonoBehaviour
         
         // 移動入力イベントを購読
         inputActions.Player.Move.performed += OnMovePerformed;
+        
+        // 回避スキル入力イベントを購読
+        inputActions.Player.Dodge.performed += OnDodgePerformed;
     }
 
     private void OnDisable()
     {
         // イベント購読解除
         inputActions.Player.Move.performed -= OnMovePerformed;
+        inputActions.Player.Dodge.performed -= OnDodgePerformed;
         inputActions.Disable();
     }
 
@@ -129,6 +139,9 @@ public class GridMovementController : MonoBehaviour
             return;
         }
 
+        // 向きを更新
+        UpdateFacingDirection(direction);
+        
         // 移動開始
         TryMove(direction);
     }
@@ -200,6 +213,172 @@ public class GridMovementController : MonoBehaviour
 
     #endregion
 
+    #region 回避スキル
+
+    /// <summary>
+    /// 回避スキル入力イベントハンドラー
+    /// </summary>
+    private void OnDodgePerformed(InputAction.CallbackContext context)
+    {
+        TryDodge();
+    }
+
+    /// <summary>
+    /// 回避スキルの実行を試行
+    /// </summary>
+    private void TryDodge()
+    {
+        // クールタイム中 or スキルデータが未設定の場合は無視
+        if (isMoving || dodgeSkill == null)
+        {
+            return;
+        }
+
+        // 回避経路を計算
+        Vector2Int targetPos = CalculateDodgePath(facingDirection, dodgeSkill.dashDistance);
+
+        // 移動先が現在位置と同じ場合は向きのみ更新（壁があるなど）
+        if (targetPos == currentGridPosition)
+        {
+            return;
+        }
+
+        // 回避タスク開始
+        moveCts?.Cancel();
+        moveCts?.Dispose();
+        moveCts = new CancellationTokenSource();
+
+        // 通常移動より高速なダッシュ
+        DodgeAsync(targetPos, dodgeSkill.speedMultiplier, moveCts.Token).Forget();
+    }
+
+    /// <summary>
+    /// 回避経路を計算（障害物判定含む）
+    /// </summary>
+    /// <param name="direction">移動方向</param>
+    /// <param name="distance">ダッシュ距離（マス数）</param>
+    /// <returns>実際に移動可能な最終座標</returns>
+    private Vector2Int CalculateDodgePath(Vector2Int direction, int distance)
+    {
+        Vector2Int finalPos = currentGridPosition;
+
+        for (int i = 1; i <= distance; i++)
+        {
+            Vector2Int nextPos = currentGridPosition + (direction * i);
+            ObstacleType obstacle = GetObstacleType(nextPos);
+
+            // 壁やモンスターの場合は手前で停止
+            if (obstacle == ObstacleType.Wall && !dodgeSkill.canPassWall)
+            {
+                break;
+            }
+            if (obstacle == ObstacleType.Monster && !dodgeSkill.canPassMonster)
+            {
+                break;
+            }
+
+            // TODO (将来実装): 崖のスキップ処理
+            // if (obstacle == ObstacleType.Cliff && !dodgeSkill.canPassCliff)
+            // {
+            //     continue; // この座標はスキップして次を確認
+            // }
+
+            // 移動可能なら位置を更新
+            finalPos = nextPos;
+        }
+
+        return finalPos;
+    }
+
+    /// <summary>
+    /// 高速ダッシュ移動（UniTask使用）
+    /// </summary>
+    /// <param name="targetGridPos">目標グリッド座標</param>
+    /// <param name="speedMultiplier">速度倍率</param>
+    /// <param name="ct">キャンセルトークン</param>
+    private async UniTask DodgeAsync(Vector2Int targetGridPos, float speedMultiplier, CancellationToken ct)
+    {
+        isMoving = true;
+
+        Vector3 startPos = transform.position;
+        Vector3Int targetCell = new Vector3Int(targetGridPos.x, targetGridPos.y, 0);
+        Vector3 targetPos = grid.CellToWorld(targetCell) + grid.cellSize / 2f;
+
+        // 通常移動より高速（speedMultiplier倍）
+        float duration = 1f / (moveSpeed * speedMultiplier);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            float t = elapsed / duration;
+            transform.position = Vector3.Lerp(startPos, targetPos, t);
+
+            elapsed += Time.deltaTime;
+            await UniTask.Yield(PlayerLoopTiming.Update, ct);
+        }
+
+        transform.position = targetPos;
+        currentGridPosition = targetGridPos;
+        isMoving = false;
+    }
+
+    #endregion
+
+    #region 障害物判定
+
+    /// <summary>
+    /// 指定グリッド座標の障害物タイプを判定
+    /// </summary>
+    /// <param name="gridPos">チェックするグリッド座標</param>
+    /// <returns>障害物タイプ</returns>
+    private ObstacleType GetObstacleType(Vector2Int gridPos)
+    {
+        // グリッド座標をワールド座標に変換
+        Vector3Int cellPos = new Vector3Int(gridPos.x, gridPos.y, 0);
+        Vector3 worldPos = grid.CellToWorld(cellPos) + grid.cellSize / 2f;
+
+        // Physics2Dで障害物を検出
+        Collider2D hit = Physics2D.OverlapCircle(worldPos, grid.cellSize.x * 0.4f, obstacleLayerMask);
+
+        if (hit == null)
+        {
+            return ObstacleType.None;
+        }
+
+        // タグで障害物タイプを判定
+        // TODO: 将来的にはTilemapやマップデータから判定する方式に変更
+        if (hit.CompareTag("Wall"))
+        {
+            return ObstacleType.Wall;
+        }
+        if (hit.CompareTag("Enemy"))
+        {
+            return ObstacleType.Monster;
+        }
+
+        return ObstacleType.None;
+    }
+
+    #endregion
+
+    #region 向き管理
+
+    /// <summary>
+    /// 移動方向に応じて向きを更新
+    /// </summary>
+    /// <param name="direction">移動方向</param>
+    private void UpdateFacingDirection(Vector2Int direction)
+    {
+        if (direction != Vector2Int.zero)
+        {
+            facingDirection = direction;
+        }
+    }
+
+    #endregion
+
     #region デバッグ用
 
 #if UNITY_EDITOR
@@ -213,6 +392,22 @@ public class GridMovementController : MonoBehaviour
         Vector3Int cellPos = new Vector3Int(currentGridPosition.x, currentGridPosition.y, 0);
         Vector3 center = grid.CellToWorld(cellPos) + grid.cellSize / 2f;
         Gizmos.DrawWireCube(center, grid.cellSize * 0.9f);
+
+        // 向きを矢印で表示
+        Gizmos.color = Color.yellow;
+        Vector3 arrowEnd = center + new Vector3(facingDirection.x, facingDirection.y, 0) * grid.cellSize.x * 0.5f;
+        DrawArrow(center, arrowEnd);
+    }
+
+    private void DrawArrow(Vector3 start, Vector3 end)
+    {
+        Gizmos.DrawLine(start, end);
+        Vector3 direction = (end - start).normalized;
+        Vector3 right = new Vector3(-direction.y, direction.x, 0);
+        Vector3 arrowHead1 = end - direction * 0.2f + right * 0.1f;
+        Vector3 arrowHead2 = end - direction * 0.2f - right * 0.1f;
+        Gizmos.DrawLine(end, arrowHead1);
+        Gizmos.DrawLine(end, arrowHead2);
     }
 
 #endif
