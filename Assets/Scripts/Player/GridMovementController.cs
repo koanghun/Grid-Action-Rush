@@ -149,6 +149,7 @@ public class GridMovementController : MonoBehaviour
         moveCts?.Dispose();
         moveCts = new CancellationTokenSource();
 
+        // isMovingをフラグにして管理するのでawaitしない
         MoveToGridPositionAsync(targetGridPos, moveCts.Token).Forget();
     }
 
@@ -201,6 +202,8 @@ public class GridMovementController : MonoBehaviour
 
     #region デバッグ用
 
+#if UNITY_EDITOR
+
     private void OnDrawGizmos()
     {
         if (grid == null) return;
@@ -211,6 +214,8 @@ public class GridMovementController : MonoBehaviour
         Vector3 center = grid.CellToWorld(cellPos) + grid.cellSize / 2f;
         Gizmos.DrawWireCube(center, grid.cellSize * 0.9f);
     }
+
+#endif
 
     #endregion
 }
