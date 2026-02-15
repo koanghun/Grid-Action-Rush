@@ -121,8 +121,12 @@ public class GridMovementController : MonoBehaviour
     {
         Vector2Int targetGridPos = currentGridPosition + direction;
 
-        // TODO: 将来的にここで衝突判定や移動可能判定を追加
-        // 例: if (!IsWalkable(targetGridPos)) return;
+        // MapManager.Instanceから通行可能判定を取得
+        if (MapManager.Instance != null && !MapManager.Instance.IsWalkable(targetGridPos))
+        {
+            // 通行不可の場合は移動キャンセル
+            return;
+        }
 
         // 移動タスク開始（通常速度）
         MoveToPosition(targetGridPos, 1.0f);
