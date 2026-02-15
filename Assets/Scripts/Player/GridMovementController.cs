@@ -1,11 +1,10 @@
 using UnityEngine;
-using UnityEngine.InputSystem;
 using Cysharp.Threading.Tasks;
 using System.Threading;
 
 /// <summary>
 /// グリッドベースのプレイヤー移動コントローラー（戦闘シーン専用）
-/// タイル単位での移動とクールタイムベース入力管理を実装
+/// タイル単位での移動ロジックを提供（入力処理はPlayerControllerが担当）
 /// </summary>
 public class GridMovementController : MonoBehaviour
 {
@@ -20,11 +19,9 @@ public class GridMovementController : MonoBehaviour
 
     #region 内部状態
 
-    // Input System
-    private InputSystem_Actions inputActions;
-
     // 移動状態
     private Vector2Int currentGridPosition;
+    private Vector2Int facingDirection = Vector2Int.down;  // 現在の向き（初期: 下向き）
     private bool isMoving = false;  // true = クールタイム中（入力受付不可）
 
     // キャンセルトークン
@@ -33,27 +30,6 @@ public class GridMovementController : MonoBehaviour
     #endregion
 
     #region Unity Lifecycle
-
-    private void Awake()
-    {
-        // Input Actionsの初期化
-        inputActions = new InputSystem_Actions();
-    }
-
-    private void OnEnable()
-    {
-        inputActions.Enable();
-        
-        // 移動入力イベントを購読
-        inputActions.Player.Move.performed += OnMovePerformed;
-    }
-
-    private void OnDisable()
-    {
-        // イベント購読解除
-        inputActions.Player.Move.performed -= OnMovePerformed;
-        inputActions.Disable();
-    }
 
     private void Start()
     {
@@ -93,34 +69,18 @@ public class GridMovementController : MonoBehaviour
 
     #endregion
 
-    #region 入力処理
+    #region 公開メソッド（PlayerControllerから呼び出し）
 
     /// <summary>
-    /// 移動入力イベントハンドラー（方向キーのみ対応）
-    /// QWERAF はスキル/攻撃用に予約済み
+    /// 指定方向への移動を実行（PlayerControllerから呼び出される）
     /// </summary>
-    private void OnMovePerformed(InputAction.CallbackContext context)
+    /// <param name="direction">移動方向（-1, 0, 1 のみ）</param>
+    public void Move(Vector2Int direction)
     {
-        // クールタイム中は入力を無視
+        // クールタイム中は移動不可
         if (isMoving)
         {
             return;
-        }
-
-        // Move アクションから入力を取得
-        Vector2 input = context.ReadValue<Vector2>();
-
-        // 方向キーのみを受け付ける（デジタル入力として扱う）
-        // アナログスティックの場合は閾値を設定
-        Vector2Int direction = Vector2Int.zero;
-
-        if (Mathf.Abs(input.x) > 0.5f)
-        {
-            direction.x = input.x > 0 ? 1 : -1;
-        }
-        else if (Mathf.Abs(input.y) > 0.5f)
-        {
-            direction.y = input.y > 0 ? 1 : -1;
         }
 
         // 入力がない場合は処理しない
@@ -129,12 +89,32 @@ public class GridMovementController : MonoBehaviour
             return;
         }
 
+        // 向きを更新
+        UpdateFacingDirection(direction);
+        
         // 移動開始
         TryMove(direction);
     }
 
     /// <summary>
-    /// 指定方向への移動を試行
+    /// 指定座標への移動（外部から座標と速度を指定）
+    /// スキルシステムから呼び出される
+    /// </summary>
+    /// <param name="targetPos">目標グリッド座標</param>
+    /// <param name="speedMultiplier">速度倍率（1.0が通常速度）</param>
+    public void MoveToPosition(Vector2Int targetPos, float speedMultiplier = 1.0f)
+    {
+        if (isMoving) return;
+
+        moveCts?.Cancel();
+        moveCts?.Dispose();
+        moveCts = new CancellationTokenSource();
+
+        MoveToGridPositionAsync(targetPos, speedMultiplier, moveCts.Token).Forget();
+    }
+
+    /// <summary>
+    /// 指定方向への移動を試行（内部処理）
     /// </summary>
     /// <param name="direction">移動方向（-1, 0, 1 のみ）</param>
     private void TryMove(Vector2Int direction)
@@ -144,13 +124,8 @@ public class GridMovementController : MonoBehaviour
         // TODO: 将来的にここで衝突判定や移動可能判定を追加
         // 例: if (!IsWalkable(targetGridPos)) return;
 
-        // 移動タスク開始
-        moveCts?.Cancel();
-        moveCts?.Dispose();
-        moveCts = new CancellationTokenSource();
-
-        // isMovingをフラグにして管理するのでawaitしない
-        MoveToGridPositionAsync(targetGridPos, moveCts.Token).Forget();
+        // 移動タスク開始（通常速度）
+        MoveToPosition(targetGridPos, 1.0f);
     }
 
     #endregion
@@ -162,8 +137,9 @@ public class GridMovementController : MonoBehaviour
     /// Vector3.Lerpで滑らかに補間
     /// </summary>
     /// <param name="targetGridPos">目標グリッド座標</param>
+    /// <param name="speedMultiplier">速度倍率（1.0が通常、2.0で2倍速）</param>
     /// <param name="ct">キャンセルトークン</param>
-    private async UniTask MoveToGridPositionAsync(Vector2Int targetGridPos, CancellationToken ct)
+    private async UniTask MoveToGridPositionAsync(Vector2Int targetGridPos, float speedMultiplier, CancellationToken ct)
     {
         isMoving = true;
 
@@ -172,8 +148,8 @@ public class GridMovementController : MonoBehaviour
         Vector3Int targetCell = new Vector3Int(targetGridPos.x, targetGridPos.y, 0);
         Vector3 targetPos = grid.CellToWorld(targetCell) + grid.cellSize / 2f;
 
-        // 移動時間を算出
-        float duration = 1f / moveSpeed;
+        // 移動時間を算出（speedMultiplier適用）
+        float duration = 1f / (moveSpeed * speedMultiplier);
         float elapsed = 0f;
 
         // Lerpで補間しながら移動
@@ -200,6 +176,46 @@ public class GridMovementController : MonoBehaviour
 
     #endregion
 
+    #region 向き管理
+
+
+
+    /// <summary>
+    /// 移動方向に応じて向きを更新
+    /// </summary>
+    /// <param name="direction">移動方向</param>
+    private void UpdateFacingDirection(Vector2Int direction)
+    {
+        if (direction != Vector2Int.zero)
+        {
+            facingDirection = direction;
+        }
+    }
+
+    #endregion
+
+    #region 公開プロパティ（状態照会用）
+
+    /// <summary>
+    /// 移動中かどうか（クールタイム中）
+    /// PlayerControllerが状態を確認するために使用
+    /// </summary>
+    public bool IsMoving => isMoving;
+
+    /// <summary>
+    /// 現在のグリッド座標
+    /// PlayerControllerやスキルシステムが参照
+    /// </summary>
+    public Vector2Int CurrentGridPosition => currentGridPosition;
+
+    /// <summary>
+    /// 現在の向き
+    /// PlayerControllerや攻撃システムが参照
+    /// </summary>
+    public Vector2Int FacingDirection => facingDirection;
+
+    #endregion
+
     #region デバッグ用
 
 #if UNITY_EDITOR
@@ -213,6 +229,22 @@ public class GridMovementController : MonoBehaviour
         Vector3Int cellPos = new Vector3Int(currentGridPosition.x, currentGridPosition.y, 0);
         Vector3 center = grid.CellToWorld(cellPos) + grid.cellSize / 2f;
         Gizmos.DrawWireCube(center, grid.cellSize * 0.9f);
+
+        // 向きを矢印で表示
+        Gizmos.color = Color.yellow;
+        Vector3 arrowEnd = center + new Vector3(facingDirection.x, facingDirection.y, 0) * grid.cellSize.x * 0.5f;
+        DrawArrow(center, arrowEnd);
+    }
+
+    private void DrawArrow(Vector3 start, Vector3 end)
+    {
+        Gizmos.DrawLine(start, end);
+        Vector3 direction = (end - start).normalized;
+        Vector3 right = new Vector3(-direction.y, direction.x, 0);
+        Vector3 arrowHead1 = end - direction * 0.2f + right * 0.1f;
+        Vector3 arrowHead2 = end - direction * 0.2f - right * 0.1f;
+        Gizmos.DrawLine(end, arrowHead1);
+        Gizmos.DrawLine(end, arrowHead2);
     }
 
 #endif
