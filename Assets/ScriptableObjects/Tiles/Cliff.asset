@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8e6f0b06cf6ebb74cb1bad943db9f8bf, type: 3}
   m_Name: Cliff
   m_EditorClassIdentifier: Assembly-CSharp::TileData
-  tileName: Cliff
+  tileName: CliffABC
   isWalkable: 0
   obstacleType: 3
   moveCostMultiplier: 1

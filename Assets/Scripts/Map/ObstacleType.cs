@@ -1,11 +1,11 @@
 /// <summary>
-/// ƒOƒŠƒbƒhã‚ÌáŠQ•¨ƒ^ƒCƒv‚Ì—ñ‹“Œ^
+/// éšœå®³ç‰©ã®ç¨®é¡
 /// </summary>
 public enum ObstacleType
 {
-    None = 0,        // áŠQ•¨‚È‚µ
-    Wall = 1,        // •Ç
-    Monster = 2,     // ƒ‚ƒ“ƒXƒ^[
-    Cliff = 3,       // ŠRi«—ˆÀ‘•j
-    Hazard = 4       // ƒnƒU[ƒh
+    None = 0,        // éšœå®³ç‰©ãªã—
+    Wall = 1,        // å£
+    Monster = 2,     // ãƒ¢ãƒ³ã‚¹ã‚¿ãƒ¼
+    Cliff = 3,       // å´–
+    Hazard = 4       // ç½ 
 }

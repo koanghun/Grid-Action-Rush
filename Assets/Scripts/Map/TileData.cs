@@ -50,22 +50,4 @@ public class TileData : ScriptableObject
     public float MoveCostMultiplier => moveCostMultiplier;
 
     #endregion
-
-    #region デバッグ用
-
-#if UNITY_EDITOR
-    /// <summary>
-    /// Inspector上での表示名をタイル名に変更
-    /// </summary>
-    private void OnValidate()
-    {
-        // ScriptableObjectのファイル名をtileNameに自動同期（オプション）
-        if (!string.IsNullOrEmpty(tileName))
-        {
-            name = tileName;
-        }
-    }
-#endif
-
-    #endregion
 }
