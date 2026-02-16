@@ -1,27 +1,27 @@
 using UnityEngine;
 
 /// <summary>
-/// ˆÚ“®ŒnƒXƒLƒ‹ƒf[ƒ^i‰ñ”ğAƒ_ƒbƒVƒ…‚È‚Çj
+/// ç§»å‹•ã‚¹ã‚­ãƒ«ãƒ‡ãƒ¼ã‚¿
 /// </summary>
 [CreateAssetMenu(fileName = "MovementSkillData", menuName = "Skills/Movement Skill Data")]
 public class MovementSkillData : SkillData
 {
-    [Header("ˆÚ“®İ’è")]
-    [Tooltip("ƒ_ƒbƒVƒ…‹——£iƒ}ƒX”j")]
+    [Header("ç§»å‹•è¨­å®š")]
+    [Tooltip("ãƒ€ãƒƒã‚·ãƒ¥è·é›¢")]
     [Min(1)]
     public int dashDistance = 2;
 
-    [Tooltip("’ÊíˆÚ“®‚É‘Î‚·‚é‘¬“x”{—¦")]
+    [Tooltip("ç§»å‹•é€Ÿåº¦å€ç‡")]
     [Min(1f)]
     public float speedMultiplier = 2.0f;
 
-    [Header("áŠQ•¨ˆ—")]
-    [Tooltip("•Ç‚ğ’Ê‰ß‰Â”\‚©i—á: —H—ì‰»ƒXƒLƒ‹j")]
+    [Header("ç§»å‹•ç¯„å›²è¨­å®š")]
+    [Tooltip("å£ã‚’é€šéã™ã‚‹ã‹")]
     public bool canPassWall = false;
 
-    [Tooltip("ƒ‚ƒ“ƒXƒ^[‚ğ’Ê‰ß‰Â”\‚©i—á: ‚·‚è”²‚¯ƒXƒLƒ‹j")]
+    [Tooltip("ãƒ¢ãƒ³ã‚¹ã‚¿ãƒ¼ã‚’é€šéã™ã‚‹ã‹")]
     public bool canPassMonster = false;
 
-    [Tooltip("ŠR‚ğ’Ê‰ß‰Â”\‚©i«—ˆÀ‘•j")]
+    [Tooltip("å´–ã‚’é€šéã™ã‚‹ã‹")]
     public bool canPassCliff = false;
 }

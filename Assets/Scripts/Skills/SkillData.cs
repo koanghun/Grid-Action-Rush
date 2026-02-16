@@ -1,20 +1,19 @@
 using UnityEngine;
 
 /// <summary>
-/// ‘SƒXƒLƒ‹‚ÌŠî’êƒNƒ‰ƒX
-/// ŠeƒXƒLƒ‹ƒ^ƒCƒviˆÚ“®AUŒ‚Aƒoƒt‚È‚Çj‚ªŒp³
+/// ã‚¹ã‚­ãƒ«ãƒ‡ãƒ¼ã‚¿
 /// </summary>
 public abstract class SkillData : ScriptableObject
 {
-    [Header("Šî–{î•ñ")]
-    [Tooltip("ƒXƒLƒ‹–¼iUI•\¦—pj")]
+    [Header("ã‚¹ã‚­ãƒ«è¨­å®š")]
+    [Tooltip("ã‚¹ã‚­ãƒ«å")]
     public string skillName;
 
-    [Tooltip("ƒXƒLƒ‹ƒAƒCƒRƒ“iUI•\¦—pj")]
+    [Tooltip("ã‚¹ã‚­ãƒ«ã‚¢ã‚¤ã‚³ãƒ³")]
     public Sprite skillIcon;
 
-    [Header("ƒN[ƒ‹ƒ^ƒCƒ€")]
-    [Tooltip("ƒN[ƒ‹ƒ^ƒCƒ€i•bj")]
+    [Header("å†·å´è¨­å®š")]
+    [Tooltip("å†·å´æ™‚é–“")]
     [Min(0f)]
     public float cooldownDuration = 1f;
 }

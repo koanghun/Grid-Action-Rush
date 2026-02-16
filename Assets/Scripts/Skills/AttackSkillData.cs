@@ -1,30 +1,30 @@
 using UnityEngine;
 
 /// <summary>
-/// UŒ‚”ÍˆÍƒpƒ^[ƒ“‚Ì—ñ‹“Œ^
+/// æ”»æ’ƒç¯„å›²ãƒ‘ã‚¿ãƒ¼ãƒ³
 /// </summary>
 public enum AttackRangePattern
 {
-    Single,      // ’PˆêƒOƒŠƒbƒhi1ƒ}ƒXj
-    Cross,       // \šiã‰º¶‰Ej
-    Square3x3,   // 3x3”ÍˆÍ
-    Line         // ’¼üiŒü‚¢‚Ä‚¢‚é•ûŒüj
+    Single,      // 1ãƒã‚¹
+    Cross,       // åå­—
+    Square3x3,   // 3x3ç¯„å›²
+    Line         // ç·š
 }
 
 /// <summary>
-/// UŒ‚ŒnƒXƒLƒ‹ƒf[ƒ^
+/// æ”»æ’ƒã‚¹ã‚­ãƒ«ãƒ‡ãƒ¼ã‚¿
 /// </summary>
 [CreateAssetMenu(fileName = "AttackSkillData", menuName = "Skills/Attack Skill Data")]
 public class AttackSkillData : SkillData
 {
-    [Header("UŒ‚İ’è")]
-    [Tooltip("ƒ_ƒ[ƒW—Ê")]
+    [Header("æ”»æ’ƒè¨­å®š")]
+    [Tooltip("ãƒ€ãƒ¡ãƒ¼ã‚¸")]
     [Min(1)]
     public int damage = 10;
 
-    [Tooltip("UŒ‚”ÍˆÍƒpƒ^[ƒ“")]
+    [Tooltip("æ”»æ’ƒç¯„å›²ãƒ‘ã‚¿ãƒ¼ãƒ³")]
     public AttackRangePattern rangePattern = AttackRangePattern.Single;
 
-    // TODO («—ˆÀ‘•): ƒOƒŠƒbƒhŒ`ó‚ğ‹Šo“I‚ÉƒfƒUƒCƒ“
+    // TODO (æœªå®Ÿè£…): æ”»æ’ƒç¯„å›²ãƒ‘ã‚¿ãƒ¼ãƒ³
     // public List<Vector2Int> attackGridPattern;
 }
