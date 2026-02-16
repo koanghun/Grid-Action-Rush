@@ -16,8 +16,6 @@ public class PlayerSkillController : MonoBehaviour
     #region 依存コンポーネント
 
     private PlayerController playerController;
-    // TODO: MapManager実装後に追加
-    // private MapManager mapManager;
 
     #endregion
 
@@ -33,13 +31,6 @@ public class PlayerSkillController : MonoBehaviour
         {
             Debug.LogError("[PlayerSkillController] PlayerControllerが見つかりません。");
         }
-
-        // TODO: MapManager実装後に追加
-        // mapManager = FindObjectOfType<MapManager>();
-        // if (mapManager == null)
-        // {
-        //     Debug.LogError("[PlayerSkillController] MapManagerが見つかりません。");
-        // }
     }
 
     #endregion
@@ -91,9 +82,10 @@ public class PlayerSkillController : MonoBehaviour
         {
             Vector2Int nextPos = startPos + (direction * i);
             
-            // TODO: MapManager実装後に変更
-            // ObstacleType obstacle = mapManager.GetObstacleType(nextPos);
-            ObstacleType obstacle = ObstacleType.None; // 仮実装：障害物なしとして扱う
+            // MapManager.Instanceから障害物タイプを取得
+            ObstacleType obstacle = MapManager.Instance != null 
+                ? MapManager.Instance.GetObstacleType(nextPos) 
+                : ObstacleType.None;
 
             // 壁やモンスターの場合は手前で停止
             if (obstacle == ObstacleType.Wall && !dodgeSkillData.canPassWall)
