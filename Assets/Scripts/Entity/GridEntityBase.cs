@@ -63,16 +63,9 @@ public abstract class GridEntityBase : MonoBehaviour, IGridEntity
     /// <param name="newOccupiedGrids">新しい占有グリッドリスト</param>
     protected void UpdateOccupiedGrids(List<Vector2Int> newOccupiedGrids)
     {
-        if (MapManager.Instance != null)
-        {
-            MapManager.Instance.UpdateEntityPosition(this, newOccupiedGrids);
-        }
-        else
-        {
-            // MapManagerがない場合は内部だけ更新
-            OccupiedGrids.Clear();
-            OccupiedGrids.AddRange(newOccupiedGrids);
-        }
+        // MapManager経由で位置を更新
+        // (MapManager側でOccupiedGridsの更新も行われる)
+        MapManager.Instance.UpdateEntityPosition(this, newOccupiedGrids);
     }
 
     /// <summary>
