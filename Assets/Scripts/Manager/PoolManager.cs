@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -7,16 +8,53 @@ using UnityEngine;
 /// </summary>
 public class PoolManager : MonoBehaviour
 {
-    #region シングルトン
+    #region 定義
 
-    public static PoolManager Instance { get; private set; }
+    [Serializable]
+    public class PoolConfig
+    {
+        public GameObject prefab;
+        public int initialSize = 10;
+    }
 
     #endregion
 
-    #region プール管理
+    #region シングルトン
+
+    private static PoolManager instance;
+
+    public static PoolManager Instance
+    {
+        get
+        {
+            if (instance == null)
+            {
+                instance = FindObjectOfType<PoolManager>();
+                if (instance == null)
+                {
+                    GameObject obj = new GameObject("PoolManager");
+                    instance = obj.AddComponent<PoolManager>();
+                }
+            }
+            return instance;
+        }
+    }
+
+    #endregion
+
+    #region Inspector設定
+
+    [Header("プール設定")]
+    [SerializeField] private List<PoolConfig> poolConfigs = new List<PoolConfig>();
+
+    #endregion
+
+    #region 内部状態
 
     // プレハブごとにプールを保持するディクショナリ
     private Dictionary<GameObject, Queue<GameObject>> poolDictionary = new Dictionary<GameObject, Queue<GameObject>>();
+    // 生成されたオブジェクトの親コンテナ（Hierarchy整理用）
+    private Dictionary<GameObject, Transform> poolParents = new Dictionary<GameObject, Transform>();
 
     #endregion
 
@@ -24,15 +62,55 @@ public class PoolManager : MonoBehaviour
 
     private void Awake()
     {
-        // シングルトン初期化
-        if (Instance == null)
-        {
-            Instance = this;
-            DontDestroyOnLoad(gameObject);
-        }
-        else
+        if (instance != null && instance != this)
         {
             Destroy(gameObject);
+            return;
+        }
+
+        instance = this;
+        DontDestroyOnLoad(gameObject);
+
+        InitializePools();
+    }
+
+    #endregion
+
+    #region 初期化
+
+    /// <summary>
+    /// 設定されたプールを初期化（プレウォーム）
+    /// </summary>
+    private void InitializePools()
+    {
+        foreach (PoolConfig config in poolConfigs)
+        {
+            if (config.prefab == null) continue;
+
+            CreatePool(config.prefab, config.initialSize);
+        }
+    }
+
+    /// <summary>
+    /// 個別のプールを作成・拡張
+    /// </summary>
+    private void CreatePool(GameObject prefab, int size)
+    {
+        if (!poolDictionary.ContainsKey(prefab))
+        {
+            poolDictionary[prefab] = new Queue<GameObject>();
+
+            // Hierarchy整理用の親オブジェクト作成
+            GameObject parentObj = new GameObject($"Pool_{prefab.name}");
+            parentObj.transform.SetParent(transform);
+            poolParents[prefab] = parentObj.transform;
+        }
+
+        for (int i = 0; i < size; i++)
+        {
+            GameObject obj = Instantiate(prefab, poolParents[prefab]);
+            obj.SetActive(false);
+            poolDictionary[prefab].Enqueue(obj);
         }
     }
 
@@ -44,33 +122,30 @@ public class PoolManager : MonoBehaviour
     /// プールからオブジェクトを取得
     /// プールが空の場合は新規生成
     /// </summary>
-    /// <param name="prefab">生成元プレハブ</param>
-    /// <param name="position">生成位置</param>
-    /// <param name="rotation">生成回転</param>
-    /// <returns>取得したGameObject</returns>
     public GameObject Get(GameObject prefab, Vector3 position, Quaternion rotation)
     {
-        // プレハブが未登録の場合は新規登録
         if (!poolDictionary.ContainsKey(prefab))
         {
-            poolDictionary[prefab] = new Queue<GameObject>();
+            // 未登録の場合はデフォルトサイズで新規作成
+            CreatePool(prefab, 1);
         }
 
         GameObject obj;
 
-        // プールに利用可能なオブジェクトがあれば再利用
         if (poolDictionary[prefab].Count > 0)
         {
             obj = poolDictionary[prefab].Dequeue();
-            obj.transform.position = position;
-            obj.transform.rotation = rotation;
-            obj.SetActive(true);
         }
         else
         {
-            // プールが空なら新規生成
-            obj = Instantiate(prefab, position, rotation);
+            // 足りない場合は新規生成（親を指定）
+            Transform parent = poolParents.ContainsKey(prefab) ? poolParents[prefab] : transform;
+            obj = Instantiate(prefab, parent);
         }
+
+        obj.transform.position = position;
+        obj.transform.rotation = rotation;
+        obj.SetActive(true);
 
         return obj;
     }
@@ -78,20 +153,22 @@ public class PoolManager : MonoBehaviour
     /// <summary>
     /// オブジェクトをプールに返却
     /// </summary>
-    /// <param name="prefab">元のプレハブ</param>
-    /// <param name="obj">返却するオブジェクト</param>
     public void Return(GameObject prefab, GameObject obj)
     {
-        // 返却時は非アクティブ化
         obj.SetActive(false);
 
-        // プールに追加
         if (!poolDictionary.ContainsKey(prefab))
         {
-            poolDictionary[prefab] = new Queue<GameObject>();
+            CreatePool(prefab, 0); // 辞書登録のみ
         }
 
         poolDictionary[prefab].Enqueue(obj);
+        
+        // 親を元に戻す（もし変更されていた場合）
+        if (poolParents.ContainsKey(prefab))
+        {
+            obj.transform.SetParent(poolParents[prefab]);
+        }
     }
 
     #endregion
