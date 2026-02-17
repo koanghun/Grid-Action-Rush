@@ -10,22 +10,43 @@ public class MapManager : MonoBehaviour
 {
     #region シングルトンパターン
 
+    private static MapManager instance;
+
     /// <summary>
-    /// シングルトンインスタンス
+    /// シングルトンインスタンス（Lazy Initialization）
     /// </summary>
-    public static MapManager Instance { get; private set; }
+    public static MapManager Instance
+    {
+        get
+        {
+            if (instance == null)
+            {
+                // Sceneから既存のMapManagerを検索
+                instance = FindAnyObjectByType<MapManager>();
+
+                // 見つからない場合は自動生成
+                if (instance == null)
+                {
+                    GameObject obj = new GameObject("MapManager");
+                    instance = obj.AddComponent<MapManager>();
+                    Debug.LogWarning("[MapManager] Sceneに存在しないため自動生成しました。Tilemapの設定を忘れずに。");
+                }
+            }
+            return instance;
+        }
+    }
 
     private void Awake()
     {
-        // シングルトンチェック（同じSceneに複数存在する場合は破棄）
-        if (Instance != null && Instance != this)
+        // 重複インスタンスチェック
+        if (instance != null && instance != this)
         {
             Debug.LogWarning("[MapManager] 既にインスタンスが存在します。このオブジェクトを破棄します。");
             Destroy(gameObject);
             return;
         }
 
-        Instance = this;
+        instance = this;
     }
 
     #endregion
@@ -54,6 +75,11 @@ public class MapManager : MonoBehaviour
     /// </summary>
     private Dictionary<TileBase, TileData> tileToDataMap = new Dictionary<TileBase, TileData>();
 
+    /// <summary>
+    /// グリッド座標 → エンティティリストのマッピング（エンティティ追跡用）
+    /// </summary>
+    private Dictionary<Vector2Int, List<IGridEntity>> gridEntityMap = new Dictionary<Vector2Int, List<IGridEntity>>();
+
     #endregion
 
     #region Unity Lifecycle
@@ -72,10 +98,18 @@ public class MapManager : MonoBehaviour
     /// </summary>
     private void InitializeTileDataMap()
     {
+        // Tilemap参照チェック
         if (tilemap == null)
         {
             Debug.LogError("[MapManager] Tilemap参照がnullです。Inspectorで設定してください。");
             return;
+        }
+
+        // TileMappingsチェック
+        if (tileMappings == null)
+        {
+            Debug.LogWarning("[MapManager] TileMappingsがnullです。空のリストとして扱います。");
+            tileMappings = new List<TileMapping>();
         }
 
         // TileMappingからTile→TileDataのマッピングを構築
@@ -150,6 +184,166 @@ public class MapManager : MonoBehaviour
     {
         tileDataMap.TryGetValue(gridPos, out TileData data);
         return data;
+    }
+
+    #endregion
+
+    #region エンティティ管理API
+
+    /// <summary>
+    /// エンティティをグリッドに登録
+    /// </summary>
+    /// <param name="entity">登録するエンティティ</param>
+    public void RegisterEntity(IGridEntity entity)
+    {
+        if (entity == null || entity.OccupiedGrids == null)
+        {
+            Debug.LogWarning("[MapManager] エンティティまたはOccupiedGridsがnullです。登録をスキップします。");
+            return;
+        }
+
+        foreach (Vector2Int gridPos in entity.OccupiedGrids)
+        {
+            if (!gridEntityMap.ContainsKey(gridPos))
+            {
+                gridEntityMap[gridPos] = new List<IGridEntity>();
+            }
+
+            gridEntityMap[gridPos].Add(entity);
+        }
+
+        Debug.Log($"[MapManager] エンティティ登録: {entity.EntityType} at {entity.RootGridPosition}");
+    }
+
+    /// <summary>
+    /// エンティティをグリッドから削除
+    /// </summary>
+    /// <param name="entity">削除するエンティティ</param>
+    public void UnregisterEntity(IGridEntity entity)
+    {
+        if (entity == null || entity.OccupiedGrids == null)
+        {
+            return;
+        }
+
+        foreach (Vector2Int gridPos in entity.OccupiedGrids)
+        {
+            if (gridEntityMap.TryGetValue(gridPos, out List<IGridEntity> list))
+            {
+                list.Remove(entity);
+
+                // リストが空になったらディクショナリからも削除（メモリ節約）
+                if (list.Count == 0)
+                {
+                    gridEntityMap.Remove(gridPos);
+                }
+            }
+        }
+
+        Debug.Log($"[MapManager] エンティティ削除: {entity.EntityType} at {entity.RootGridPosition}");
+    }
+
+    /// <summary>
+    /// エンティティの位置を更新（移動時に使用）
+    /// アルゴリズム: Simple & Safe（全削除 → 再登録）
+    /// </summary>
+    /// <param name="entity">更新するエンティティ</param>
+    /// <param name="newOccupiedGrids">新しい占有グリッドリスト</param>
+    public void UpdateEntityPosition(IGridEntity entity, List<Vector2Int> newOccupiedGrids)
+    {
+        if (entity == null || newOccupiedGrids == null)
+        {
+            Debug.LogWarning("[MapManager] エンティティまたは新座標リストがnullです。");
+            return;
+        }
+
+        // Step 1: 既存位置から完全に削除
+        foreach (Vector2Int oldGrid in entity.OccupiedGrids)
+        {
+            if (gridEntityMap.TryGetValue(oldGrid, out List<IGridEntity> list))
+            {
+                list.Remove(entity);
+                if (list.Count == 0)
+                {
+                    gridEntityMap.Remove(oldGrid);
+                }
+            }
+        }
+
+        // Step 2: 新位置に登録
+        entity.OccupiedGrids.Clear();
+        entity.OccupiedGrids.AddRange(newOccupiedGrids);
+
+        foreach (Vector2Int newGrid in newOccupiedGrids)
+        {
+            if (!gridEntityMap.ContainsKey(newGrid))
+            {
+                gridEntityMap[newGrid] = new List<IGridEntity>();
+            }
+            gridEntityMap[newGrid].Add(entity);
+        }
+    }
+
+    /// <summary>
+    /// 指定グリッド座標のエンティティを取得
+    /// </summary>
+    /// <param name="gridPos">グリッド座標</param>
+    /// <returns>エンティティリスト（存在しない場合は空リスト）</returns>
+    public List<IGridEntity> GetEntitiesAt(Vector2Int gridPos)
+    {
+        if (gridEntityMap.TryGetValue(gridPos, out List<IGridEntity> entities))
+        {
+            return entities;
+        }
+
+        return new List<IGridEntity>();
+    }
+
+    /// <summary>
+    /// 指定グリッド座標の特定タイプのエンティティを取得
+    /// </summary>
+    /// <param name="gridPos">グリッド座標</param>
+    /// <param name="type">エンティティタイプ</param>
+    /// <returns>フィルタリングされたエンティティリスト</returns>
+    public List<IGridEntity> GetEntitiesAt(Vector2Int gridPos, GridEntityType type)
+    {
+        List<IGridEntity> result = new List<IGridEntity>();
+
+        if (gridEntityMap.TryGetValue(gridPos, out List<IGridEntity> entities))
+        {
+            foreach (IGridEntity entity in entities)
+            {
+                if (entity.EntityType == type)
+                {
+                    result.Add(entity);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// 複数グリッド範囲のエンティティを取得（攻撃範囲用、重複除去済み）
+    /// </summary>
+    /// <param name="gridPositions">対象グリッド座標リスト</param>
+    /// <returns>重複のないエンティティセット</returns>
+    public HashSet<IGridEntity> GetEntitiesInArea(List<Vector2Int> gridPositions)
+    {
+        HashSet<IGridEntity> result = new HashSet<IGridEntity>();
+
+        foreach (Vector2Int gridPos in gridPositions)
+        {
+            if (gridEntityMap.TryGetValue(gridPos, out List<IGridEntity> entities))
+            {
+                foreach (IGridEntity entity in entities)
+                {
+                    result.Add(entity);
+                }
+            }
+        }
+
+        return result;
     }
 
     #endregion

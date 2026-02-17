@@ -11,8 +11,7 @@ public class PlayerController : MonoBehaviour
 
     private GridMovementController movementController;
     private PlayerSkillController skillController;
-    // TODO: 将来的に追加予定
-    // private PlayerCombatController combatController;
+    private PlayerAttackController attackController;
 
     #endregion
 
@@ -29,6 +28,7 @@ public class PlayerController : MonoBehaviour
         // 各種コンポーネントの取得
         movementController = GetComponent<GridMovementController>();
         skillController = GetComponent<PlayerSkillController>();
+        attackController = GetComponent<PlayerAttackController>();
 
         // コンポーネントの存在確認
         if (movementController == null)
@@ -38,6 +38,10 @@ public class PlayerController : MonoBehaviour
         if (skillController == null)
         {
             Debug.LogWarning("[PlayerController] PlayerSkillControllerが見つかりません。スキル機能が無効です。");
+        }
+        if (attackController == null)
+        {
+            Debug.LogWarning("[PlayerController] PlayerAttackControllerが見つかりません。攻撃機能が無効です。");
         }
 
         // Input Actionsの初期化
@@ -54,9 +58,8 @@ public class PlayerController : MonoBehaviour
         // 回避スキル入力イベントを購読
         inputActions.Player.Dodge.performed += OnDodgePerformed;
 
-        // TODO: 将来的に追加予定
-        // inputActions.Player.Attack.performed += OnAttackPerformed;
-        // inputActions.Player.Skill1.performed += OnSkill1Performed;
+        // 攻撃入力イベントを購読
+        inputActions.Player.Attack.performed += OnAttackPerformed;
     }
 
     private void OnDisable()
@@ -64,6 +67,7 @@ public class PlayerController : MonoBehaviour
         // イベント購読解除
         inputActions.Player.Move.performed -= OnMovePerformed;
         inputActions.Player.Dodge.performed -= OnDodgePerformed;
+        inputActions.Player.Attack.performed -= OnAttackPerformed;
 
         inputActions.Disable();
     }
@@ -91,7 +95,7 @@ public class PlayerController : MonoBehaviour
 
     /// <summary>
     /// 回避スキル入力イベントハンドラー
-    /// GridMovementControllerに処理を委譲
+    /// PlayerSkillControllerに処理を委譲
     /// </summary>
     private void OnDodgePerformed(InputAction.CallbackContext context)
     {
@@ -101,12 +105,17 @@ public class PlayerController : MonoBehaviour
         skillController.PerformDodge();
     }
 
-    // TODO: 将来的に追加予定
-    // private void OnAttackPerformed(InputAction.CallbackContext context)
-    // {
-    //     if (IsMoving) return;  // 移動中は攻撃不可
-    //     combatController?.PerformAttack(movementController.FacingDirection);
-    // }
+    /// <summary>
+    /// 攻撃入力イベントハンドラー
+    /// PlayerAttackControllerに処理を委譲
+    /// </summary>
+    private void OnAttackPerformed(InputAction.CallbackContext context)
+    {
+        if (attackController == null) return;
+
+        // PlayerAttackControllerに攻撃を指示
+        attackController.PerformAttack();
+    }
 
     #endregion
 
