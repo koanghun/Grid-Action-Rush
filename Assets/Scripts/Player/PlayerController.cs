@@ -3,15 +3,34 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// プレイヤーの全体的な動作を管理するメインコントローラー
-/// Input Systemの中央ハブとして機能し、各種コンポーネントに入力を配信
+/// スキルスロット方式を採用し、新スキル追加時にこのクラスを変更しない設計
 /// </summary>
 public class PlayerController : MonoBehaviour
 {
-    #region コンポーネント参照
+    #region Inspector設定
 
-    private GridMovementController movementController;
-    private PlayerSkillController skillController;
-    private PlayerAttackController attackController;
+    [Header("移動設定")]
+    [SerializeField] private GridMovementController movementController;
+
+    [Header("スキルスロット")]
+    [Tooltip("攻撃スキルデータ")]
+    [SerializeField] private AttackSkillData attackSkillData;
+
+    [Tooltip("回避スキルデータ")]
+    [SerializeField] private MovementSkillData dodgeSkillData;
+
+    [Header("固有スキルスロット (Q/W/E/R)")]
+    [Tooltip("スロット0=Q, 1=W, 2=E, 3=R")]
+    [SerializeField] private SkillData[] uniqueSkillDatas = new SkillData[4];
+
+    #endregion
+
+    #region スキルスロット
+
+    // ISkillインターフェースで統一管理することで、スキル追加時にこのクラスを変更不要
+    private ISkill attackSkill;
+    private ISkill dodgeSkill;
+    private readonly ISkill[] uniqueSkills = new ISkill[4];
 
     #endregion
 
@@ -25,50 +44,56 @@ public class PlayerController : MonoBehaviour
 
     private void Awake()
     {
-        // 各種コンポーネントの取得
-        movementController = GetComponent<GridMovementController>();
-        skillController = GetComponent<PlayerSkillController>();
-        attackController = GetComponent<PlayerAttackController>();
+        // GridMovementControllerがInspectorで未設定の場合はGetComponentで取得
+        if (movementController == null)
+        {
+            movementController = GetComponent<GridMovementController>();
+        }
 
-        // コンポーネントの存在確認
         if (movementController == null)
         {
             Debug.LogError("[PlayerController] GridMovementControllerが見つかりません。");
         }
-        if (skillController == null)
+
+        // スキルインスタンスをここで生成（MonoBehaviourではなく純粋なC#クラス）
+        // →Inspectorのデータを注入するだけで、スキルの追加・変更が容易
+        attackSkill = attackSkillData != null ? new AttackSkill(attackSkillData, this) : null;
+        dodgeSkill = dodgeSkillData != null ? new DodgeSkill(dodgeSkillData, this) : null;
+
+        if (attackSkill == null) Debug.LogWarning("[PlayerController] AttackSkillDataが未設定です。攻撃機能が無効です。");
+        if (dodgeSkill == null) Debug.LogWarning("[PlayerController] MovementSkillDataが未設定です。回避機能が無効です。");
+
+        // 固有スキルスロットの初期化（Q/W/E/R）
+        // SkillDataのサブタイプを判定してISkillを生成するFactoryパターン
+        for (int i = 0; i < uniqueSkillDatas.Length; i++)
         {
-            Debug.LogWarning("[PlayerController] PlayerSkillControllerが見つかりません。スキル機能が無効です。");
-        }
-        if (attackController == null)
-        {
-            Debug.LogWarning("[PlayerController] PlayerAttackControllerが見つかりません。攻撃機能が無効です。");
+            uniqueSkills[i] = CreateSkillFromData(uniqueSkillDatas[i]);
         }
 
-        // Input Actionsの初期化
         inputActions = new InputSystem_Actions();
     }
 
     private void OnEnable()
     {
         inputActions.Enable();
-
-        // 移動入力イベントを購読
         inputActions.Player.Move.performed += OnMovePerformed;
-
-        // 回避スキル入力イベントを購読
         inputActions.Player.Dodge.performed += OnDodgePerformed;
-
-        // 攻撃入力イベントを購読
         inputActions.Player.Attack.performed += OnAttackPerformed;
+        inputActions.Player.Skill1.performed += OnSkill1Performed;
+        inputActions.Player.Skill2.performed += OnSkill2Performed;
+        inputActions.Player.Skill3.performed += OnSkill3Performed;
+        inputActions.Player.Skill4.performed += OnSkill4Performed;
     }
 
     private void OnDisable()
     {
-        // イベント購読解除
         inputActions.Player.Move.performed -= OnMovePerformed;
         inputActions.Player.Dodge.performed -= OnDodgePerformed;
         inputActions.Player.Attack.performed -= OnAttackPerformed;
-
+        inputActions.Player.Skill1.performed -= OnSkill1Performed;
+        inputActions.Player.Skill2.performed -= OnSkill2Performed;
+        inputActions.Player.Skill3.performed -= OnSkill3Performed;
+        inputActions.Player.Skill4.performed -= OnSkill4Performed;
         inputActions.Disable();
     }
 
@@ -77,66 +102,58 @@ public class PlayerController : MonoBehaviour
     #region 入力イベントハンドラー
 
     /// <summary>
-    /// 移動入力イベントハンドラー
-    /// GridMovementControllerに処理を委譲
+    /// 移動入力ハンドラー
     /// </summary>
     private void OnMovePerformed(InputAction.CallbackContext context)
     {
-        if (movementController == null) return;
-
         Vector2 input = context.ReadValue<Vector2>();
         Vector2Int direction = ConvertInputToDirection(input);
-
-        if (direction == Vector2Int.zero) return;
-
-        // Facadeメソッドを使用
-        RequestMove(direction);
+        if (direction != Vector2Int.zero) RequestMove(direction);
     }
 
     /// <summary>
-    /// 回避スキル入力イベントハンドラー
-    /// PlayerSkillControllerに処理を委譲
+    /// 回避スキル入力ハンドラー
+    /// スロット経由で実行することで、スキルの差し替えがここに影響しない
     /// </summary>
     private void OnDodgePerformed(InputAction.CallbackContext context)
     {
-        if (skillController == null) return;
-
-        // PlayerSkillControllerに回避を指示
-        skillController.PerformDodge();
+        dodgeSkill?.Execute();
     }
 
     /// <summary>
-    /// 攻撃入力イベントハンドラー
-    /// PlayerAttackControllerに処理を委譲
+    /// 攻撃入力ハンドラー
+    /// スロット経由で実行することで、スキルの差し替えがここに影響しない
     /// </summary>
     private void OnAttackPerformed(InputAction.CallbackContext context)
     {
-        if (attackController == null) return;
-
-        // PlayerAttackControllerに攻撃を指示
-        attackController.PerformAttack();
+        attackSkill?.Execute();
     }
+
+    /// <summary>
+    /// 固有スキル入力ハンドラー（Q/W/E/R）
+    /// スロットインデックスで統一管理し、ハンドラーの重複を最小化
+    /// </summary>
+    private void OnSkill1Performed(InputAction.CallbackContext context) => uniqueSkills[0]?.Execute();
+    private void OnSkill2Performed(InputAction.CallbackContext context) => uniqueSkills[1]?.Execute();
+    private void OnSkill3Performed(InputAction.CallbackContext context) => uniqueSkills[2]?.Execute();
+    private void OnSkill4Performed(InputAction.CallbackContext context) => uniqueSkills[3]?.Execute();
 
     #endregion
 
-    #region Facadeメソッド（移動リクエストの中央集約）
+    #region Facadeメソッド（スキルから呼び出される移動リクエスト）
 
     /// <summary>
-    /// 一般移動リクエスト（Facadeメソッド）
-    /// 入力システムや他のコンポーネントから呼び出される
+    /// 方向指定移動リクエスト
     /// </summary>
-    /// <param name="direction">移動方向</param>
     public void RequestMove(Vector2Int direction)
     {
         movementController?.Move(direction);
     }
 
     /// <summary>
-    /// 指定座標への移動リクエスト（スキル用、Facadeメソッド）
-    /// スキルシステムから呼び出され、GridMovementControllerを直接参照する必要を無くす
+    /// 座標指定移動リクエスト（スキル用）
+    /// DodgeSkillなどのスキルがGridMovementControllerを直接参照しないための窓口
     /// </summary>
-    /// <param name="targetPos">目標グリッド座標</param>
-    /// <param name="speedMultiplier">速度倍率（1.0が通常速度）</param>
     public void RequestMoveToPosition(Vector2Int targetPos, float speedMultiplier = 1.0f)
     {
         movementController?.MoveToPosition(targetPos, speedMultiplier);
@@ -144,52 +161,41 @@ public class PlayerController : MonoBehaviour
 
     #endregion
 
-    #region ヘルパーメソッド
+    #region ヘルパー
 
     /// <summary>
-    /// Vector2入力をグリッド方向(Vector2Int)に変換
-    /// アナログ入力を4方向のデジタル入力として扱う
+    /// SkillDataのサブタイプを判定し、対応するISkill実装を生成するFactory
+    /// 新スキルタイプ追加時はここにcaseを追記するだけでよい
     /// </summary>
-    /// <param name="input">Input Systemから取得した入力ベクトル</param>
-    /// <returns>グリッド方向（-1, 0, 1のみ）</returns>
+    private ISkill CreateSkillFromData(SkillData data)
+    {
+        if (data == null) return null;
+        if (data is AttackSkillData attack)   return new AttackSkill(attack, this);
+        if (data is MovementSkillData movement) return new DodgeSkill(movement, this);
+        // 将来の拡張: 新スキルタイプをここに追加
+        Debug.LogWarning($"[PlayerController] 未対応のSkillDataタイプ: {data.GetType().Name}");
+        return null;
+    }
+
     private Vector2Int ConvertInputToDirection(Vector2 input)
     {
         Vector2Int direction = Vector2Int.zero;
-
-        // X軸とY軸で閾値を超えた方を優先
-        // X軸を優先することで、斜め入力時は横移動になる
-        if (Mathf.Abs(input.x) > 0.5f)
-        {
-            direction.x = input.x > 0 ? 1 : -1;
-        }
-        else if (Mathf.Abs(input.y) > 0.5f)
-        {
-            direction.y = input.y > 0 ? 1 : -1;
-        }
-
+        if (Mathf.Abs(input.x) > 0.5f) direction.x = input.x > 0 ? 1 : -1;
+        else if (Mathf.Abs(input.y) > 0.5f) direction.y = input.y > 0 ? 1 : -1;
         return direction;
     }
 
     #endregion
 
-    #region 公開プロパティ（状態照会用）
+    #region 公開プロパティ
 
-    /// <summary>
-    /// プレイヤーが移動中かどうか
-    /// 他のシステムが状態を確認するために使用
-    /// </summary>
+    /// <summary>プレイヤーが移動中かどうか（スキルのCanExecuteで参照）</summary>
     public bool IsMoving => movementController != null && movementController.IsMoving;
 
-    /// <summary>
-    /// プレイヤーの現在のグリッド座標
-    /// スキルシステムが参照
-    /// </summary>
+    /// <summary>現在のグリッド座標</summary>
     public Vector2Int CurrentGridPosition => movementController != null ? movementController.CurrentGridPosition : Vector2Int.zero;
 
-    /// <summary>
-    /// プレイヤーの現在の向き
-    /// 攻撃システムなどで使用
-    /// </summary>
+    /// <summary>現在の向き</summary>
     public Vector2Int FacingDirection => movementController != null ? movementController.FacingDirection : Vector2Int.down;
 
     #endregion

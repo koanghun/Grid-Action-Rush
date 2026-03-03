@@ -1,55 +1,102 @@
-# 구현 계획 - 그리드 공격 시스템
+# 공격 시스템 구현 내역
 
-이 계획의 목표는 인스펙터에서 ScriptableObject를 통해 공격 패턴(그리드)을 유연하게 정의할 수 있는 공격 시스템을 구현하는 것입니다.
+> **상태**: ✅ 구현 완료
+> **브랜치**: `feat/attack-system` → `master` 병합 완료
 
-## 사용자 검토 필요 항목
+인스펙터에서 ScriptableObject를 통해 공격 패턴(그리드)을 유연하게 정의할 수 있는 공격 시스템.  
+초기 계획에서 리팩토링을 거쳐 `ISkill` 인터페이스 기반 슬롯 구조로 전환됨.
+
+---
+
+## 아키텍처 개요
+
+```
+PlayerController
+  └── ISkill attackSkill  ←  AttackSkill 인스턴스 (순수 C# 클래스)
+                                └── SkillBase : ISkill
+                                      └── AttackSkillData (ScriptableObject)
+```
 
 > [!IMPORTANT]
-> **Unity 에디터 작업 필요**
-> 저는 파일 생성이나 Unity 에디터 제어 권한이 없으므로, 다음 작업을 직접 수행해주셔야 합니다:
-> 1. 스크립트 생성 (`PlayerAttackController.cs`, `PoolManager.cs`, `EnemyHealth.cs`).
-> 2. ScriptableObject (`AttackSkillData`) 에셋 생성.
-> 3. 인스펙터에서 `attackGridPattern` 설정.
-> 4. `PlayerAttackController` 컴포넌트에 참조 할당.
+> **`PlayerAttackController.cs` (MonoBehaviour)는 삭제됨**  
+> 리팩토링으로 `AttackSkill.cs` (순수 C# 클래스)로 대체되었습니다.  
+> 컴포넌트를 플레이어 오브젝트에 직접 붙이는 구조가 아닌,  
+> `PlayerController`가 `Awake()`에서 인스턴스를 직접 생성합니다.
 
-## 변경 제안
+---
+
+## 구현된 파일 목록
 
 ### 데이터 계층
-#### [수정] [AttackSkillData.cs](file:///c:/Users/parkkh/projects/Grid-Action-Rush/Assets/Scripts/Skills/AttackSkillData.cs)
-- 사용자 정의 상대 좌표를 위한 `List<Vector2Int> attackGridPattern` 필드 추가.
-- 시각 효과 관련 필드 추가 (`rangeEffectPrefab`, `effectDuration`).
+
+#### [AttackSkillData.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Skills/AttackSkillData.cs)
+- `List<Vector2Int> attackGridPattern` — 플레이어 기준 상대 좌표 패턴
+- `int damage` — 데미지 량
+- `AttackRangePattern rangePattern` — 하위 호환용 열거형 (실제로는 `attackGridPattern` 사용)
+- `GameObject rangeEffectPrefab` — 공격 범위 이펙트 프리팹
+- `float effectDuration` — 이펙트 표시 시간
+
+#### [SkillData.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Skills/SkillData.cs)
+- `AttackSkillData`의 베이스 추상 클래스
+- `string skillName`, `Sprite skillIcon`, `float cooldownDuration` 보유
+
+### 스킬 추상화 계층
+
+#### [ISkill.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Skills/ISkill.cs)
+- `bool CanExecute()` — 실행 가능 여부 판정
+- `void Execute()` — 스킬 실행 (내부에서 CanExecute 체크)
+
+#### [SkillBase.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Skills/SkillBase.cs)
+- `ISkill` 구현 추상 클래스
+- `Time.time` 기반 쿨타임 관리 로직을 여기에 공통화
+- `playerController.IsMoving` 체크 (이동 중 스킬 사용 불가)
+- 서브클래스는 `OnExecute()` 만 구현
+
+### 스킬 구현체
+
+#### [AttackSkill.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Skills/AttackSkill.cs)
+- `SkillBase` 상속 (순수 C# 클래스, MonoBehaviour 아님)
+- `CalculateAttackRange()` — 플레이어 향에 따라 패턴 회전 후 월드 좌표 변환
+- `RotateByFacing()` — 4방향 회전 로직 (상하좌우)
+- `ShowAttackEffectAsync()` — `PoolManager`를 통해 이펙트 생성/반환 (UniTask)
+- `ApplyDamageToTargets()` — `MapManager.GetEntitiesInArea()`로 그리드 기반 피격 판정
 
 ### 코어 시스템
-#### [신규] [PoolManager.cs](file:///c:/Users/parkkh/projects/Grid-Action-Rush/Assets/Scripts/Managers/PoolManager.cs)
-- 오브젝트 풀링을 관리하기 위한 싱글톤 패턴 적용.
-- 주요 메서드: `Get(prefab, pos, rot)`, `Return(obj)`.
-- **이유**: 공격 시 빈번한 생성/파괴로 인한 GC 스파이크를 방지하여 WebGL 성능 최적화.
 
-### 플레이어 로직
-#### [신규] [PlayerAttackController.cs](file:///c:/Users/parkkh/projects/Grid-Action-Rush/Assets/Scripts/Player/PlayerAttackController.cs)
-- `PlayerController`로부터 입력을 전달받아 처리.
-- `Time.time`을 사용한 쿨타임 관리.
-- 플레이어가 바라보는 방향을 기준으로 `attackGridPattern`을 실제 월드 좌표로 변환.
-- `PoolManager`를 통해 이펙트 생성.
-- `MapManager.GetEntitiesInArea`를 사용하여 적 감지 (Physics2D 사용 안 함).
+#### [PoolManager.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Manager/PoolManager.cs)
+- 싱글톤 패턴
+- `Get(prefab, pos, rot)` — 풀에서 오브젝트 꺼내기
+- `Return(prefab, obj)` — 풀에 오브젝트 반환
+- WebGL GC 스파이크 방지 목적
 
-#### [수정] [PlayerController.cs](file:///c:/Users/parkkh/projects/Grid-Action-Rush/Assets/Scripts/Player/PlayerController.cs)
-- `PlayerAttackController` 의존성 주입 및 참조 추가.
-- 'Attack' 입력 액션을 컨트롤러로 라우팅.
+#### [PlayerController.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Player/PlayerController.cs)
+- `[SerializeField] AttackSkillData attackSkillData` — Inspector에서 데이터 할당
+- `Awake()` 에서 `new AttackSkill(attackSkillData, this)` 로 슬롯 초기화
+- `OnAttackPerformed` → `attackSkill?.Execute()` 호출
+- 키 바인딩: `A` 키 (+ 마우스 좌클릭)
 
 ### 테스트/적(Enemy)
-#### [신규] [EnemyHealth.cs](file:///c:/Users/parkkh/projects/Grid-Action-Rush/Assets/Scripts/Enemy/EnemyHealth.cs)
-- `GridEntityBase`를 상속받아 자동으로 MapManager에 등록/해제.
-- 공격 로직 검증을 위한 간단한 HP 관리 및 `TakeDamage` 메서드 구현.
-- `Awake` 시 Transform 위치를 기준으로 그리드 좌표 초기화 및 스냅핑.
 
-## 검증 계획
+#### [EnemyHealth.cs](file:///Users/kh/Develop/Unity_Projects/Grid-Action-Rush/Assets/Scripts/Enemy/EnemyHealth.cs)
+- `GridEntityBase` 상속 → `MapManager`에 자동 등록/해제
+- `TakeDamage(int damage)` — HP 감소 + 사망 처리 (`Destroy`)
+- `Awake()` 에서 Transform 위치 → 그리드 좌표 변환 및 스냅
 
-### 수동 검증
-1. **에디터 설정**:
-   - `AttackSkillData` 에셋 생성 및 "십자(Cross)" 패턴 설정: `(0,1), (0,-1), (1,0), (-1,0)`.
-   - 플레이어에게 할당.
-2. **플레이 모드**:
-   - 'A' 키(공격 키) 입력.
-   - 설정한 상대 그리드 위치에 이펙트가 올바르게 표시되는지 확인.
-   - 더미 적(Enemy)에 대한 데미지 로그가 콘솔에 출력되는지 확인.
+---
+
+## 인스펙터 설정 방법
+
+1. `AttackSkillData` ScriptableObject 에셋 생성
+   - Create > Skills > Attack Skill Data
+2. `attackGridPattern` 에 공격 패턴 좌표 입력
+   - 십자: `(0,1), (0,-1), (1,0), (-1,0)`
+3. `PlayerController` 컴포넌트의 `Attack Skill Data` 슬롯에 할당
+4. (선택) `rangeEffectPrefab` 에 이펙트 프리팹 할당
+
+---
+
+## 검증
+
+- 'A' 키 입력 → `[AttackSkill] 攻撃実行: N個のグリッドを攻撃` 콘솔 로그 출력
+- 설정한 상대 그리드 위치에 이펙트 표시 (rangeEffectPrefab 할당 시)
+- 범위 내 `EnemyHealth` 오브젝트에 데미지 적용 확인

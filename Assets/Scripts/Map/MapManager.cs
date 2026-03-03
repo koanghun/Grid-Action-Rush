@@ -13,12 +13,22 @@ public class MapManager : MonoBehaviour
     private static MapManager instance;
 
     /// <summary>
+    /// アプリ終了中フラグ
+    /// OnApplicationQuit以降のInstance生成を抑制し、
+    /// シーン終了時にOnDisable→Instance→新規GameObjectが生まれる問題を防ぐ
+    /// </summary>
+    private static bool isQuitting = false;
+
+    /// <summary>
     /// シングルトンインスタンス（Lazy Initialization）
     /// </summary>
     public static MapManager Instance
     {
         get
         {
+            // アプリ終了中は新規生成しない（シーン終了時の誤生成を防止）
+            if (isQuitting) return null;
+
             if (instance == null)
             {
                 // Sceneから既存のMapManagerを検索
@@ -47,6 +57,22 @@ public class MapManager : MonoBehaviour
         }
 
         instance = this;
+        isQuitting = false;
+    }
+
+    private void OnApplicationQuit()
+    {
+        // アプリ終了フラグを立てることで、OnDisableからのInstance生成を抑制
+        isQuitting = true;
+    }
+
+    private void OnDestroy()
+    {
+        // 自分がstaticインスタンスの場合のみnullに戻す（重複インスタンスが破棄される場合は無視）
+        if (instance == this)
+        {
+            instance = null;
+        }
     }
 
     #endregion

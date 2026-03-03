@@ -110,6 +110,10 @@ public class GridMovementController : MonoBehaviour
         moveCts?.Dispose();
         moveCts = new CancellationTokenSource();
 
+        // 非同期タスク開始前にフラグを立てる
+        // .Forget()後、async内でtrueにすると同一フレームの入力を弾けないため
+        isMoving = true;
+
         MoveToGridPositionAsync(targetPos, speedMultiplier, moveCts.Token).Forget();
     }
 
@@ -145,37 +149,42 @@ public class GridMovementController : MonoBehaviour
     /// <param name="ct">キャンセルトークン</param>
     private async UniTask MoveToGridPositionAsync(Vector2Int targetGridPos, float speedMultiplier, CancellationToken ct)
     {
-        isMoving = true;
-
-        // 開始位置と目標位置を計算
-        Vector3 startPos = transform.position;
-        Vector3Int targetCell = new Vector3Int(targetGridPos.x, targetGridPos.y, 0);
-        Vector3 targetPos = grid.CellToWorld(targetCell) + grid.cellSize / 2f;
-
-        // 移動時間を算出（speedMultiplier適用）
-        float duration = 1f / (moveSpeed * speedMultiplier);
-        float elapsed = 0f;
-
-        // Lerpで補間しながら移動
-        while (elapsed < duration)
+        // isMovingはMoveToPosition()側で設定済み
+        // キャンセル例外が発生してもfinallyで確実にフラグを解除する
+        try
         {
-            // キャンセル確認
-            ct.ThrowIfCancellationRequested();
+            // 開始位置と目標位置を計算
+            Vector3 startPos = transform.position;
+            Vector3Int targetCell = new Vector3Int(targetGridPos.x, targetGridPos.y, 0);
+            Vector3 targetPos = grid.CellToWorld(targetCell) + grid.cellSize / 2f;
 
-            // 線形補間
-            float t = elapsed / duration;
-            transform.position = Vector3.Lerp(startPos, targetPos, t);
+            // 移動時間を算出（speedMultiplier適用）
+            float duration = 1f / (moveSpeed * speedMultiplier);
+            float elapsed = 0f;
 
-            elapsed += Time.deltaTime;
-            await UniTask.Yield(PlayerLoopTiming.Update, ct);
+            // Lerpで補間しながら移動
+            while (elapsed < duration)
+            {
+                // キャンセル確認
+                ct.ThrowIfCancellationRequested();
+
+                // 線形補間
+                float t = elapsed / duration;
+                transform.position = Vector3.Lerp(startPos, targetPos, t);
+
+                elapsed += Time.deltaTime;
+                await UniTask.Yield(PlayerLoopTiming.Update, ct);
+            }
+
+            // 最終位置を正確に設定（浮動小数点誤差を排除）
+            transform.position = targetPos;
+            currentGridPosition = targetGridPos;
         }
-
-        // 最終位置を正確に設定（浮動小数点誤差を排除）
-        transform.position = targetPos;
-        currentGridPosition = targetGridPos;
-        
-        // クールタイム終了、次の入力を受け付け可能に
-        isMoving = false;
+        finally
+        {
+            // キャンセルや例外発生時も必ずフラグを解除する
+            isMoving = false;
+        }
     }
 
     #endregion
