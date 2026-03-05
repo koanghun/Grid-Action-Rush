@@ -282,8 +282,6 @@ GameObject:
   - component: {fileID: 372389300}
   - component: {fileID: 372389299}
   - component: {fileID: 372389302}
-  - component: {fileID: 372389303}
-  - component: {fileID: 372389304}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -391,32 +389,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fbe8cb4231c79044eb4e77ea0f988847, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
---- !u!114 &372389303
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 372389298}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e327bcd0253d5d94d9c7e480b2bdb0bd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerSkillController
+  movementController: {fileID: 372389299}
+  attackSkillData: {fileID: 11400000, guid: 990ddee5ef3ced24aa81f6555a2ba1de, type: 2}
   dodgeSkillData: {fileID: 11400000, guid: b23deba00d1b0a144b64a646f7a268f2, type: 2}
---- !u!114 &372389304
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 372389298}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7df95987ec1bcac4bb64e54935dd2767, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::PlayerAttackController
-  attackData: {fileID: 11400000, guid: 990ddee5ef3ced24aa81f6555a2ba1de, type: 2}
+  uniqueSkillDatas:
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
+  - {fileID: 0}
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -717,6 +697,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c980cb052e1d48348b34c0df3602bb7c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoolManager
+  poolConfigs: []
 --- !u!4 &1331087029
 Transform:
   m_ObjectHideFlags: 0

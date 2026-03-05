@@ -12,11 +12,10 @@ public class PlayerController : MonoBehaviour
     [Header("移動設定")]
     [SerializeField] private GridMovementController movementController;
 
-    [Header("スキルスロット")]
-    [Tooltip("攻撃スキルデータ")]
+    [Header("通常攻撃スロット")]
     [SerializeField] private AttackSkillData attackSkillData;
 
-    [Tooltip("回避スキルデータ")]
+    [Tooltip("回避スキルスロット")]
     [SerializeField] private MovementSkillData dodgeSkillData;
 
     [Header("固有スキルスロット (Q/W/E/R)")]
@@ -170,7 +169,7 @@ public class PlayerController : MonoBehaviour
     private ISkill CreateSkillFromData(SkillData data)
     {
         if (data == null) return null;
-        if (data is AttackSkillData attack)   return new AttackSkill(attack, this);
+        if (data is AttackSkillData attack) return new AttackSkill(attack, this);
         if (data is MovementSkillData movement) return new DodgeSkill(movement, this);
         // 将来の拡張: 新スキルタイプをここに追加
         Debug.LogWarning($"[PlayerController] 未対応のSkillDataタイプ: {data.GetType().Name}");

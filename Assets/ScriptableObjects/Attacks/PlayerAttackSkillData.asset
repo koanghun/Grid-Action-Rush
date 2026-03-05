@@ -16,7 +16,6 @@ MonoBehaviour:
   skillIcon: {fileID: 0}
   cooldownDuration: 1
   damage: 10
-  rangePattern: 0
   attackGridPattern: []
   rangeEffectPrefab: {fileID: 0}
   effectDuration: 0.5

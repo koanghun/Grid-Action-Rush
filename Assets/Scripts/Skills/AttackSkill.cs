@@ -105,6 +105,7 @@ public class AttackSkill : SkillBase
             if (entity.EntityType == GridEntityType.Enemy ||
                 entity.EntityType == GridEntityType.Boss)
             {
+                // 攻撃範囲が重なった場合でも、複数回ダメージを与えないようにする
                 entity.GameObjectReference.GetComponent<EnemyHealth>()?.TakeDamage(attackData.damage);
             }
         }
