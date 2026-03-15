@@ -80,8 +80,11 @@ public class MapManager : MonoBehaviour
     #region Inspector設定
 
     [Header("Tilemap参照")]
-    [Tooltip("レベルデザインで使用するTilemap（Inspector上でアサイン）")]
-    [SerializeField] private Tilemap tilemap;
+    [Tooltip("レベルデザインで使用するTilemap群（Floor, Wallなど。リスト順に読み込み、後のTilemapが優先される）")]
+    [SerializeField] private List<Tilemap> tilemaps = new List<Tilemap>();
+
+    [Tooltip("Grid参照（Gizmo描画用。未設定の場合はTilemapの親Gridを自動取得）")]
+    [SerializeField] private Grid grid;
 
     [Header("タイルデータマッピング")]
     [Tooltip("Tileに対応するTileDataのリスト（順番は問わない）")]
@@ -120,14 +123,15 @@ public class MapManager : MonoBehaviour
     #region 初期化
 
     /// <summary>
-    /// Tilemapからマップデータを読み込み、Dictionaryを構築
+    /// 複数TilemapからTileDataを読み込み、Dictionaryを構築
+    /// リスト後方のTilemapが優先される（例: Wallが Floorを上書き）
     /// </summary>
     private void InitializeTileDataMap()
     {
-        // Tilemap参照チェック
-        if (tilemap == null)
+        // Tilemapリストチェック
+        if (tilemaps == null || tilemaps.Count == 0)
         {
-            Debug.LogError("[MapManager] Tilemap参照がnullです。Inspectorで設定してください。");
+            Debug.LogError("[MapManager] Tilemapリストが空です。Inspectorで設定してください。");
             return;
         }
 
@@ -147,22 +151,40 @@ public class MapManager : MonoBehaviour
             }
         }
 
-        // Tilemapの範囲を取得
-        BoundsInt bounds = tilemap.cellBounds;
-
-        // 全セルを走査してDictionaryに登録
-        foreach (var pos in bounds.allPositionsWithin)
+        // 全Tilemapを順に走査（後のTilemapが優先 = 上書き）
+        foreach (var tilemap in tilemaps)
         {
-            Vector2Int gridPos = new Vector2Int(pos.x, pos.y);
-            TileBase tile = tilemap.GetTile(pos);
-
-            if (tile != null && tileToDataMap.ContainsKey(tile))
+            if (tilemap == null)
             {
-                tileDataMap[gridPos] = tileToDataMap[tile];
+                Debug.LogWarning("[MapManager] Tilemapリストにnull要素があります。スキップします。");
+                continue;
+            }
+
+            BoundsInt bounds = tilemap.cellBounds;
+
+            foreach (var pos in bounds.allPositionsWithin)
+            {
+                Vector2Int gridPos = new Vector2Int(pos.x, pos.y);
+                TileBase tile = tilemap.GetTile(pos);
+
+                if (tile != null && tileToDataMap.ContainsKey(tile))
+                {
+                    tileDataMap[gridPos] = tileToDataMap[tile];
+                }
             }
         }
 
-        Debug.Log($"[MapManager] マップデータ初期化完了: {tileDataMap.Count}タイル登録");
+        // Grid参照の自動取得（未設定の場合）
+        if (grid == null && tilemaps.Count > 0 && tilemaps[0] != null)
+        {
+            grid = tilemaps[0].layoutGrid;
+            if (grid == null)
+            {
+                Debug.LogWarning("[MapManager] Grid参照を自動取得できませんでした。Gizmo描画が正しく動作しない可能性があります。");
+            }
+        }
+
+        Debug.Log($"[MapManager] マップデータ初期化完了: {tileDataMap.Count}タイル登録（{tilemaps.Count}個のTilemapから読み込み）");
     }
 
     #endregion
@@ -383,7 +405,7 @@ public class MapManager : MonoBehaviour
         if (tileDataMap == null || tileDataMap.Count == 0)
             return;
 
-        if (tilemap == null)
+        if (grid == null)
             return;
 
         // 各タイルの通行可否を可視化
@@ -393,11 +415,11 @@ public class MapManager : MonoBehaviour
             TileData data = kvp.Value;
 
             Vector3Int cellPos = new Vector3Int(gridPos.x, gridPos.y, 0);
-            Vector3 worldPos = tilemap.CellToWorld(cellPos) + tilemap.cellSize / 2f;
+            Vector3 worldPos = grid.CellToWorld(cellPos) + grid.cellSize / 2f;
 
             // 通行可能 = 緑、通行不可 = 赤
             Gizmos.color = data.IsWalkable ? new Color(0, 1, 0, 0.3f) : new Color(1, 0, 0, 0.3f);
-            Gizmos.DrawWireCube(worldPos, tilemap.cellSize * 0.9f);
+            Gizmos.DrawWireCube(worldPos, grid.cellSize * 0.9f);
         }
     }
 #endif
