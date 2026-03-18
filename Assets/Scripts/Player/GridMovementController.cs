@@ -83,14 +83,18 @@ public class GridMovementController : MonoBehaviour
             return;
         }
 
-        // 入力がない場合は処理しない
+        // 入력がない場合は処理しない
         if (direction == Vector2Int.zero)
         {
             return;
         }
 
-        // 向きを更新
-        UpdateFacingDirection(direction);
+        // 向きが異なる場合は向きだけ更新し、移動はしない
+        if (facingDirection != direction)
+        {
+            UpdateFacingDirection(direction);
+            return; // ここで終了
+        }
         
         // 移動開始
         TryMove(direction);
